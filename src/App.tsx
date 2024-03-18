@@ -1,47 +1,49 @@
+import { useEffect } from "react";
 import "./App.css";
-import { Theme, ThemeProvider, useThemeMode } from "./components/ThemeProvider";
-import { Button } from "./components/ui/button";
+import { ThemeProvider } from "./components/ThemeProvider";
 import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from "./components/ui/select";
+  ResizableHandle,
+  ResizablePanelGroup,
+} from "./components/ui/resizable";
+
+import {
+  getThemeStyleFromLocal,
+  useThemeStyle,
+} from "./stores/ThemeStyleStore";
+import { Toaster } from "./components/ui/sonner";
+import { TopPanel } from "./components/TopPanel";
+import { BottomPanel } from "./components/BottomPanel";
+import { CenterPanelGroup } from "./components/CenterPanelGroup";
 
 const App = () => {
-	//
-	return (
-		<ThemeProvider
-			defaultTheme='dark'
-			storageKey='theme-mode'
-		>
-			<div>
-				Hello world!!! <Button>I'm a button!</Button>
-				<ThemeModeSelector />
-			</div>
-		</ThemeProvider>
-	);
+  const { setStyle } = useThemeStyle();
+
+  useEffect(() => {
+    const css = getThemeStyleFromLocal();
+    if (css) {
+      setStyle(css);
+    }
+  }, []);
+  return (
+    <ThemeProvider defaultTheme="dark" storageKey="theme-mode">
+      <ResizablePanelGroup
+        direction="vertical"
+        autoSaveId={"layout-save"}
+        className="fixed inset-0"
+      >
+        <TopPanel />
+        {/*  */}
+        <ResizableHandle />
+        {/*  */}
+        <CenterPanelGroup />
+        {/*  */}
+        <ResizableHandle />
+        {/*  */}
+        <BottomPanel />
+      </ResizablePanelGroup>
+      <Toaster richColors toastOptions={{}} />
+    </ThemeProvider>
+  );
 };
 
 export default App;
-
-const ThemeModeSelector = () => {
-	const { theme, setTheme } = useThemeMode();
-	return (
-		<Select
-			defaultValue={theme}
-			value={theme}
-			onValueChange={(v) => setTheme(v as Theme)}
-		>
-			<SelectTrigger className='w-[180px]'>
-				<SelectValue placeholder='Theme' />
-			</SelectTrigger>
-			<SelectContent>
-				<SelectItem value='light'>Light</SelectItem>
-				<SelectItem value='dark'>Dark</SelectItem>
-				<SelectItem value='system'>System</SelectItem>
-			</SelectContent>
-		</Select>
-	);
-};
