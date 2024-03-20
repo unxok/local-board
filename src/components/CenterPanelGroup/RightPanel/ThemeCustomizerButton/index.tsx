@@ -19,7 +19,7 @@ export const ThemeCustomizerButton = () => {
   const { resetStyle, setStyle, style } = useThemeStyle();
   const [css, setCss] = useState<string>();
   useEffect(() => {
-    console.log("style is: ", style);
+    // console.log("style is: ", style);
     setCss(style || "");
   }, [style]);
   return (
