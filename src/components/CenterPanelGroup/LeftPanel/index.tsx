@@ -1,6 +1,6 @@
 import { Draggable, usePosition } from "@/components/Draggable";
 import { ResizablePanelSpacer } from "@/components/ResizablePanelSpacer";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -11,7 +11,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { boardSchema, useBoard } from "@/stores/BoardStore";
+import { BoardSchema, boardSchema, useBoard } from "@/stores/BoardStore";
 import { DndContext } from "@dnd-kit/core";
 import { ReactNode, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -28,10 +28,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { PopoverClose } from "@radix-ui/react-popover";
 
 export const LeftPanel = () => {
   const { handleDragEnd, position } = usePosition();
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const { setBoards } = useBoard();
+
   return (
     <ResizablePanel defaultSize={15} minSize={5} collapsible collapsedSize={0}>
       <DndContext onDragEnd={handleDragEnd}>
@@ -47,6 +50,9 @@ export const LeftPanel = () => {
               popoverOpen={popoverOpen}
               setPopoverOpen={setPopoverOpen}
               position={position}
+              trigger={<Button>Add Board</Button>}
+              // TODO fix this. It works but is sketch because I may have dragging of boards later which would break this
+              handleCancel={() => setBoards((prev) => prev?.slice(0, -1))}
             >
               <BoardForm />
             </DraggablePopover>
@@ -60,56 +66,67 @@ export const LeftPanel = () => {
   );
 };
 
-const BoardForm = () => {
-  const { setBoards, nextAvailableId } = useBoard();
+export const BoardForm = ({ defaultData }: { defaultData?: BoardSchema }) => {
+  const {
+    setBoards,
+    nextBoardId,
+    incrementNextAvailableId,
+    saveBoardsLocally,
+  } = useBoard();
   const form = useForm<z.infer<typeof boardSchema>>({
     resolver: zodResolver(boardSchema),
-    defaultValues: {
-      id: nextAvailableId,
+    defaultValues: defaultData || {
+      id: nextBoardId,
+      title: "",
+      description: "",
+      notes: "",
     },
   });
 
-  // TODO it looks like it's not retaining previous boards here
   const onChange = (inputName: string, value: string) => {
     const newFormValues = {
       ...form.getValues(),
       [inputName]: value,
-    };
-    setBoards((prev) => prev);
+    } as BoardSchema;
+
+    console.log("form: ", newFormValues);
+
     setBoards((prev) => {
-      const copyPrev = prev.boards ? [...prev.boards] : undefined;
+      const copyPrev = prev ? [...prev] : undefined;
       if (!copyPrev) {
-        return {
-          ...prev,
-          boards: [newFormValues],
-        };
+        return [newFormValues];
       }
-      const foundId = copyPrev.findIndex((b) => b.id === nextAvailableId);
+      const foundId = copyPrev.findIndex((b) => b.id === form.getValues().id);
       if (foundId === -1) {
-        return {
-          ...prev,
-          boards: [newFormValues],
-        };
+        return [...copyPrev, newFormValues];
       }
       copyPrev[foundId] = newFormValues;
-      return {
-        prev,
-        boards: copyPrev,
-      };
+      return copyPrev;
     });
   };
 
   const onSubmit = (values: z.infer<typeof boardSchema>) => {
     console.log(values);
+    saveBoardsLocally();
+    incrementNextAvailableId();
   };
+
+  // const handleCancel = () => {
+  //   const { id } = form.getValues();
+  //   setBoards((prev) => prev?.filter((b) => b.id !== id));
+  // };
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <div>
-          <h1 className="text-lg">New board</h1>
+          <h1 className="text-lg">
+            {defaultData ? `Editing ${defaultData.title} board` : "New board"}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            You can set up lanes and cards after creating the board
+            {defaultData
+              ? "Mistakes happen :)"
+              : "You can set up lanes and cards after creating the board"}
           </p>
         </div>
         <FormField
@@ -178,12 +195,38 @@ const BoardForm = () => {
           )}
         />
         <div className="flex flex-row items-center justify-end gap-3">
-          <Button type="reset" variant={"ghost"}>
+          <PopoverClose
+            type="reset"
+            className={
+              buttonVariants({ variant: "ghost" }) + " text-destructive"
+            }
+            onClick={() =>
+              setBoards((prev) => {
+                const copyPrev = prev ? [...prev] : undefined;
+                const id = form.getValues().id;
+                // console.log("attempting delete on: ", id);
+                const arr = copyPrev?.filter((b) => b.id !== id);
+                saveBoardsLocally(arr);
+                return arr;
+              })
+            }
+          >
+            Delete
+          </PopoverClose>
+          {/* <PopoverClose
+            type="reset"
+            className={buttonVariants({ variant: "ghost" })}
+            // onClick={handleCancel}
+          >
             Cancel
-          </Button>
-          <Button type="submit" onClick={() => onSubmit(form.getValues())}>
-            Save
-          </Button>
+          </PopoverClose> */}
+          <PopoverClose
+            type="submit"
+            onClick={() => onSubmit(form.getValues())}
+            className={buttonVariants({ variant: "default" })}
+          >
+            Done
+          </PopoverClose>
         </div>
       </form>
     </Form>
@@ -193,27 +236,32 @@ const BoardForm = () => {
 export const DraggablePopover = ({
   popoverOpen,
   setPopoverOpen,
+  // handleCancel,
   position,
+  trigger,
   children,
 }: {
   popoverOpen: boolean;
   setPopoverOpen: (b: boolean) => void;
+  handleCancel: () => void;
   position: { x: number; y: number };
+  trigger?: ReactNode;
   children: ReactNode;
-}) => (
-  <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-    <PopoverTrigger asChild>
-      <Button>Add board</Button>
-    </PopoverTrigger>
-    <PopoverContent
-      asChild
-      onFocusOutside={(e) => e.preventDefault()}
-      onPointerDownOutside={(e) => e.preventDefault()}
-      onInteractOutside={(e) => e.preventDefault()}
-    >
-      <Draggable id={"add-board-button"} position={position}>
-        {children}
-      </Draggable>
-    </PopoverContent>
-  </Popover>
-);
+}) => {
+  return (
+    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+      {trigger && <PopoverTrigger asChild>{trigger}</PopoverTrigger>}
+      <PopoverContent
+        asChild
+        onInteractOutside={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onFocusOutside={(e) => e.preventDefault()}
+        // onEscapeKeyDown={handleCancel}
+      >
+        <Draggable id={"add-board-button"} position={position}>
+          {children}
+        </Draggable>
+      </PopoverContent>
+    </Popover>
+  );
+};

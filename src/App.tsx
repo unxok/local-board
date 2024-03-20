@@ -14,14 +14,28 @@ import { Toaster } from "./components/ui/sonner";
 import { TopPanel } from "./components/TopPanel";
 import { BottomPanel } from "./components/BottomPanel";
 import { CenterPanelGroup } from "./components/CenterPanelGroup";
+import {
+  getBoardFromLocal,
+  getNextBoardIdFromLocal,
+  useBoard,
+} from "./stores/BoardStore";
 
 const App = () => {
   const { setStyle } = useThemeStyle();
+  const { setBoards, incrementNextAvailableId } = useBoard();
 
   useEffect(() => {
     const css = getThemeStyleFromLocal();
     if (css) {
       setStyle(css);
+    }
+    const boards = getBoardFromLocal();
+    if (boards) {
+      setBoards(() => boards);
+    }
+    const nextBoardId = getNextBoardIdFromLocal();
+    if (nextBoardId !== undefined) {
+      incrementNextAvailableId(nextBoardId);
     }
   }, []);
   return (
@@ -41,7 +55,13 @@ const App = () => {
         {/*  */}
         <BottomPanel />
       </ResizablePanelGroup>
-      <Toaster richColors toastOptions={{}} />
+      <Toaster
+        richColors
+        toastOptions={{}}
+        position="top-right"
+        expand
+        visibleToasts={Infinity}
+      />
     </ThemeProvider>
   );
 };

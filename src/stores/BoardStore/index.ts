@@ -1,6 +1,7 @@
-import { BOARD } from "@/consts";
+import { BOARD, BOARD_AVAILABLE_ID } from "@/consts";
 import { create } from "zustand";
 import { z } from "zod";
+import { toast } from "sonner";
 
 export const boardSchema = z.object({
   id: z.number(),
@@ -15,58 +16,101 @@ export type BoardState = {
   boards?: BoardSchema[];
   addBoards: (obj: Omit<BoardSchema, "id">) => void;
   setBoards: (
-    partial:
-      | BoardState
-      | Partial<BoardState>
-      | ((state: BoardState) => BoardState | Partial<BoardState>),
-    replace?: boolean | undefined,
+    callback: (data: BoardSchema[] | undefined) => BoardSchema[] | undefined,
   ) => void;
+  saveBoardsLocally: (data?: BoardSchema[]) => void;
   resetBoards: () => void;
-  nextAvailableId: number;
-  incrementNextAvailableId: () => void;
+  nextBoardId: number;
+  incrementNextAvailableId: (specific?: number) => void;
 };
 
 /**
- * Saves the board locally and defers the setItem to LocalStorage until after the UI repaints
- * @param str Ideally a string containing a BoardScheme array. This is not validated.
+ * Saves the value as a JSON stringified string and defers the setItem to `localStorage` until after the UI repaints
+ * @param key The key of the item to update in `localStorage`
+ * @param value Can be any type but if `null` or `undefined` the item will be <u>removed</u> form `localStorage` entirely
+ * ```ts
+ * // example
+ * deferredLocalStorage<number>('myKey', 254);
+ * ```
  */
-const saveBoardLocally = (str?: string) => {
-  // current way of trying to defer until after ui updates and main thread are clear
+export const deferredLocalStorage = <T>(key: string, value: T) => {
   setTimeout(() => {
-    if (!str) {
-      localStorage.removeItem(BOARD);
+    if (value == null || value === undefined) {
+      localStorage.removeItem(key);
       return;
     }
-    localStorage.setItem(BOARD, str);
+    const str = JSON.stringify(value);
+    localStorage.setItem(key, str);
   }, 0);
 };
 
-/**
- * Tries to get the CSS from LocalStorage
- * @returns A CSS string (ideally) or undefined
- */
 export const getBoardFromLocal = () => {
   const localData = localStorage.getItem(BOARD);
   if (!localData) return;
-  return localData;
+  try {
+    return JSON.parse(localData) as BoardSchema[];
+  } catch (e) {
+    console.error(
+      "Something went wrong when attempting to parse string to JSON :( --> ",
+      e,
+    );
+  }
 };
 
-export const useBoard = create<BoardState>()((set) => ({
+export const getNextBoardIdFromLocal = () => {
+  const localData = localStorage.getItem(BOARD_AVAILABLE_ID);
+  if (!localData) return;
+  try {
+    return JSON.parse(localData) as number;
+  } catch (e) {
+    console.error(
+      "Something went wrong when attempting to parse string to JSON :( --> ",
+      e,
+    );
+  }
+};
+
+export const useBoard = create<BoardState>()((set, get) => ({
   boards: undefined,
   addBoards: (obj) =>
     set((state) => {
       const arr = state.boards ? state.boards : [];
       const newState = {
         ...state,
-        boards: [...arr, { ...obj, id: state.nextAvailableId }],
+        boards: [...arr, { ...obj, id: state.nextBoardId }],
       };
       state.incrementNextAvailableId();
-      saveBoardLocally(JSON.stringify(newState.boards));
+      // saveBoardLocally(JSON.stringify(newState.boards));
       return newState;
     }),
-  setBoards: set,
+  setBoards: (callback) => {
+    set((state) => {
+      const newData = callback(state.boards);
+      return {
+        state,
+        boards: newData,
+      };
+    });
+  },
+  /**
+   * Defers until main thread is clear
+   */
+  saveBoardsLocally: (data) => {
+    toast.success("Changes saved locally");
+    if (data) {
+      deferredLocalStorage(BOARD, data);
+      deferredLocalStorage(BOARD_AVAILABLE_ID, data.length + 1);
+      return;
+    }
+    const { boards, nextBoardId } = get();
+    deferredLocalStorage(BOARD, boards);
+    deferredLocalStorage(BOARD_AVAILABLE_ID, nextBoardId + 1);
+  },
   resetBoards: () => {},
-  nextAvailableId: 0,
-  incrementNextAvailableId: () =>
-    set((state) => ({ ...state, nextAvailableId: state.nextAvailableId + 1 })),
+  nextBoardId: 0,
+  incrementNextAvailableId: (specific) =>
+    set((state) => ({
+      ...state,
+      nextBoardId: specific !== undefined ? specific : state.nextBoardId + 1,
+    })),
 }));
